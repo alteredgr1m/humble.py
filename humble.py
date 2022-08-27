@@ -6,6 +6,8 @@ import os
 import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from webdriver_manager.chrome import ChromeDriverManager
@@ -13,12 +15,14 @@ from webdriver_manager.firefox import GeckoDriverManager
 
 BROWSERS = {
     "chrome": {
+        "options": ChromeOptions,
         "manager": ChromeDriverManager,
         "service": ChromeService,
         "name": "chromedriver",
-        "webdriver": webdriver.Chrome,
+        "webdriver": webdriver.Chrome
     },
     "firefox": {
+        "options": FirefoxOptions,
         "manager": GeckoDriverManager,
         "service": FirefoxService,
         "name": "geckodriver",
@@ -75,27 +79,42 @@ argparser.add_argument("-b",
                        help="to use",
                        required=True)
 
-argparser.add_argument("-f",
-                       "--format",
-                       default="PDF",
-                       dest="format",
-                       help="to download books in (PDF/EPUB/MOBI)")
-
 argparser.add_argument("-u",
                        "--url",
                        dest="url",
                        help="to scrape",
                        required=True)
 
+argparser.add_argument("-f",
+                       "--format",
+                       default="PDF",
+                       dest="format",
+                       help="to download books in (PDF/EPUB/MOBI)")
+
+argparser.add_argument("-hl",
+                       "--headless",
+                       default=True,
+                       dest="headless",
+                       help="run browser in headless mode",
+                       type=bool)
+
+
 args = argparser.parse_args()
 
 BROWSER = BROWSERS[args.browser]
 FORMAT = args.format
+HEADLESS = args.headless
 URL = args.url
 
 driver_path = get_driver_path(BROWSER, DRIVERS_PATH)
 
-browser = BROWSER["webdriver"](service=BROWSER["service"](executable_path=driver_path))
+browser_options = BROWSER["options"]()
+browser_options.headless = HEADLESS
+
+browser = BROWSER["webdriver"](
+    options=browser_options,
+    service=BROWSER["service"](executable_path=driver_path)
+)
 
 browser.get(URL)
 
