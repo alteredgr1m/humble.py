@@ -5,6 +5,7 @@ from datetime import date
 import os
 import json
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from webdriver_manager.chrome import ChromeDriverManager
@@ -74,6 +75,12 @@ argparser.add_argument("-b",
                        help="to use",
                        required=True)
 
+argparser.add_argument("-f",
+                       "--format",
+                       default="PDF",
+                       dest="format",
+                       help="to download books in (PDF/EPUB/MOBI)")
+
 argparser.add_argument("-u",
                        "--url",
                        dest="url",
@@ -83,6 +90,7 @@ argparser.add_argument("-u",
 args = argparser.parse_args()
 
 BROWSER = BROWSERS[args.browser]
+FORMAT = args.format
 URL = args.url
 
 driver_path = get_driver_path(BROWSER, DRIVERS_PATH)
@@ -91,4 +99,13 @@ browser = BROWSER["webdriver"](service=BROWSER["service"](executable_path=driver
 
 browser.get(URL)
 
+links = browser.find_elements(By.LINK_TEXT, FORMAT)
+book_links = []
+
+for link in links:
+    link = link.get_property("href")
+    book_links.append(link)
+
 browser.close()
+
+print(book_links)
