@@ -2,8 +2,8 @@
 
 import argparse
 from datetime import date
-import os
 import json
+from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options as ChromeOptions
@@ -13,46 +13,19 @@ from selenium.webdriver.firefox.service import Service as FirefoxService
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.firefox import GeckoDriverManager
 
-BROWSERS = {
-    "chrome": {
-        "options": ChromeOptions,
-        "manager": ChromeDriverManager,
-        "service": ChromeService,
-        "name": "chromedriver",
-        "webdriver": webdriver.Chrome
-    },
-    "firefox": {
-        "options": FirefoxOptions,
-        "manager": GeckoDriverManager,
-        "service": FirefoxService,
-        "name": "geckodriver",
-        "webdriver": webdriver.Firefox
-    }
-}
 
-CWD = os.getcwd()
-
-if os.name == "nt":
-    DRIVER_PATH = f"{CWD}\\drivers"
-    DRIVERS_PATH = f"{DRIVER_PATH}\\.wdm\\drivers.json"
-else:
-    DRIVER_PATH = f"{CWD}/drivers"
-    DRIVERS_PATH = f"{DRIVER_PATH}/.wdm/drivers.json"
-
-
-def parse_timestamp(timestamp):
+def parse_timestamp(timestamp: str) -> date:
     timestamp = timestamp.split("/")
-    day, month, year = [int(n) for n in timestamp]
+    day, month, year = [int(digit) for digit in timestamp]
     return date(year, month, day)
 
 
-def get_driver_path(driver, drivers_path):
-    if not os.path.exists(drivers_path):
+def get_driver_path(driver: webdriver, drivers_path: Path) -> str:
+    if not drivers_path.exists():
         driver["manager"](path=drivers_path).install()
 
     with open(drivers_path, "r") as drivers_file:
         drivers = json.load(drivers_file)
-        drivers_file.close()
 
     driver_info = {}
 
@@ -70,6 +43,77 @@ def get_driver_path(driver, drivers_path):
         get_driver_path(driver, drivers_path)
 
 
+def setup_browser(settings: dict) -> webdriver:
+    browsers = {
+        "chrome": {
+            "options": ChromeOptions,
+            "manager": ChromeDriverManager,
+            "service": ChromeService,
+            "name": "chromedriver",
+            "webdriver": webdriver.Chrome
+        },
+        "firefox": {
+            "options": FirefoxOptions,
+            "manager": GeckoDriverManager,
+            "service": FirefoxService,
+            "name": "geckodriver",
+            "webdriver": webdriver.Firefox
+        }
+    }
+
+    print("- Setting up the browser.")
+
+    browser = browsers[settings["browser"]]
+
+    driver_path = get_driver_path(browser, settings["drivers_path"])
+
+    browser_options = browser["options"]()
+    browser_options.headless = settings["headless"]
+
+    return browser["webdriver"](
+        options=browser_options,
+        service=browser["service"](executable_path=driver_path)
+    )
+
+
+def get_bundle(settings: dict) -> dict:
+    path = settings["download_path"] / "bundle.json"
+
+    print("- Fetching the bundle.")
+
+    if path.exists():
+        print("- Opening bundle.json from download destination.")
+        with open(path, "r") as bundle:
+            bundle = json.load(bundle)
+        return bundle
+
+    browser = setup_browser(settings)
+    browser.get(settings["url"])
+
+    name = browser.title.split("(")[0].strip()
+
+    elements = browser.find_elements(By.LINK_TEXT, settings["format"])
+
+    links = []
+
+    for element in elements:
+        link = element.get_attribute("href")
+        links.append(link)
+
+    browser.close()
+
+    bundle = {
+        "name": name,
+        "links": links
+    }
+
+    with open(path, "w") as bundle_file:
+        print("- Creating bundle.json in download destination.")
+        json.dump(bundle, bundle_file)
+
+    return bundle
+
+
 argparser = argparse.ArgumentParser()
 
 argparser.add_argument("-b",
@@ -77,19 +121,29 @@ argparser.add_argument("-b",
                        choices=["chrome", "firefox"],
                        dest="browser",
                        help="to use",
-                       required=True)
+                       required=True,
+                       type=str)
+
+argparser.add_argument("-p",
+                       "--path",
+                       default=Path.cwd() / "drivers/downloads",
+                       dest="download_path",
+                       help="to download books to (Example: ~/Downloads)",
+                       type=str)
 
 argparser.add_argument("-u",
                        "--url",
                        dest="url",
                        help="to scrape",
-                       required=True)
+                       required=True,
+                       type=str)
 
 argparser.add_argument("-f",
                        "--format",
                        default="PDF",
                        dest="format",
-                       help="to download books in (PDF/EPUB/MOBI)")
+                       help="to download books in (PDF/EPUB/MOBI/CBZ)",
+                       type=str)
 
 argparser.add_argument("-hl",
                        "--headless",
@@ -99,32 +153,10 @@ argparser.add_argument("-hl",
                        type=bool)
 
 
-args = argparser.parse_args()
+user_settings = vars(argparser.parse_args())
 
-BROWSER = BROWSERS[args.browser]
-FORMAT = args.format
-HEADLESS = args.headless
-URL = args.url
+user_settings["driver_path"] = Path.cwd() / "drivers"
+user_settings["drivers_path"] = user_settings["driver_path"] / ".wdm/drivers.json"
+user_settings["download_path"] = user_settings["download_path"].expanduser()
 
-driver_path = get_driver_path(BROWSER, DRIVERS_PATH)
-
-browser_options = BROWSER["options"]()
-browser_options.headless = HEADLESS
-
-browser = BROWSER["webdriver"](
-    options=browser_options,
-    service=BROWSER["service"](executable_path=driver_path)
-)
-
-browser.get(URL)
-
-links = browser.find_elements(By.LINK_TEXT, FORMAT)
-book_links = []
-
-for link in links:
-    link = link.get_property("href")
-    book_links.append(link)
-
-browser.close()
-
-print(book_links)
+print(get_bundle(user_settings))
