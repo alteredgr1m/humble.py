@@ -1,5 +1,5 @@
 # humble.py
-Humble Bundle Book Download Manager
+Humble Bundle Book Downloader
 
 ### Instructions
 
