@@ -2,6 +2,7 @@
 
 import argparse
 from datetime import date
+import requests as req
 import json
 from pathlib import Path
 from selenium import webdriver
@@ -12,6 +13,13 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.firefox.service import Service as FirefoxService
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.firefox import GeckoDriverManager
+
+
+def parse_filename_from(header: str) -> str:
+    filename = header.split(" ")[1]
+    start = filename.find("\"") + 1
+    end = filename.find("\"", start)
+    return filename[start:end]
 
 
 def parse_timestamp(timestamp: str) -> date:
@@ -114,6 +122,45 @@ def get_bundle(settings: dict) -> dict:
     return bundle
 
 
+def download_bundle(settings: dict, bundle: dict) -> None:
+    name = bundle["name"]
+    links = bundle["links"]
+    link_count = len(links)
+    link_counter = 1
+    successes = 0
+    path = settings["download_path"] / name
+
+    if not path.exists():
+        path.mkdir()
+
+    print(f"- Downloading {len(links)} books.")
+
+    for link in links:
+        res = req.get(link)
+
+        filename = parse_filename_from(res.headers["Content-Disposition"])
+
+        message = f"- Downloading {filename} [{link_counter} / {link_count}]"
+
+        print(message)
+
+        if res.status_code == 200:
+            book_path = path / filename
+
+            with open(book_path, "wb") as book_file:
+                book_file.write(res.content)
+
+            print(f"{message} successful.")
+
+            successes += 1
+        else:
+            print(f"{message} unsuccessful.")
+
+        link_counter += 1
+
+        print(f"- Downloaded {successes} out of {link_count} books.")
+
+
 argparser = argparse.ArgumentParser()
 
 argparser.add_argument("-b",
@@ -159,4 +206,4 @@ user_settings["driver_path"] = Path.cwd() / "drivers"
 user_settings["drivers_path"] = user_settings["driver_path"] / ".wdm/drivers.json"
 user_settings["download_path"] = user_settings["download_path"].expanduser()
 
-print(get_bundle(user_settings))
+download_bundle(user_settings, get_bundle(user_settings))
